@@ -77,10 +77,12 @@ struct ContentView: View {
                 Text("No file selected")
                     .font(Theme.uiFont(size: 12))
                     .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
+                    .legibilityShadow(store.tint)
                 Spacer()
             } else if store.mode == .edit {
                 EditorView(text: store.buffer,
                            revision: store.revision,
+                           tint: store.tint,
                            onChange: { store.buffer = $0 })
                     .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
                     .padding(.horizontal, Theme.innerPadding)
@@ -88,6 +90,7 @@ struct ContentView: View {
             } else {
                 ScrollView {
                     MarkdownView(blocks: MarkdownParser.parse(store.buffer))
+                        .legibilityShadow(store.tint)
                         .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
                         .padding(.horizontal, Theme.innerPadding)
                         .padding(.bottom, Theme.innerPadding)
@@ -155,6 +158,7 @@ struct ContentView: View {
             bannerButton("Choose folder") { store.chooseFolder() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .legibilityShadow(store.tint)
     }
 
     // MARK: - Hover chrome
@@ -218,6 +222,7 @@ struct ContentView: View {
             }
             // Stays up during a rename, or the text field would disappear from
             // under the cursor the moment it left the strip.
+            .legibilityShadow(store.tint)
             .opacity(chromeVisible ? 1 : 0)
             .allowsHitTesting(chromeVisible)
             .animation(.easeInOut(duration: 0.12), value: chromeVisible)

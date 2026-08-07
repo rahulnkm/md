@@ -15,6 +15,7 @@ struct SidebarView: View {
             .padding(.horizontal, 8)
             .padding(.top, Theme.topPadding)
             .padding(.bottom, Theme.innerPadding)
+            .legibilityShadow(store.tint)
         }
         .scrollContentBackground(.hidden)
     }

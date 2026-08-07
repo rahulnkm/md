@@ -92,6 +92,36 @@ enum Theme {
     /// Geist ships no italic face; italics carry through opacity instead.
     static let italicOpacity: CGFloat = 0.82
 
+    // MARK: - Legibility shadow
+
+    /// A tight dark halo under each glyph.
+    ///
+    /// The window is glass on purpose, so the background is the desktop and
+    /// can be any colour at all. Painting an opaque panel behind the text
+    /// would guarantee contrast but throw away the thing that makes the window
+    /// worth looking at. A per-glyph shadow buys the separation instead - the
+    /// same trick macOS uses for desktop icon labels and for text over
+    /// vibrancy - and costs nothing visually when the background is already
+    /// dark.
+    ///
+    /// Two passes: a tight one that hugs the letterforms and does most of the
+    /// work, and a wider, softer one that darkens the field around a whole
+    /// line so bright detail behind it stops competing.
+    static let shadowTightRadius: CGFloat = 1.5
+    static let shadowSoftRadius: CGFloat = 4
+
+    static func shadowColour(_ tint: TintStyle) -> Color {
+        .black.opacity(tint.shadowStrength)
+    }
+
+    static func nsShadow(_ tint: TintStyle) -> NSShadow {
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(CGFloat(tint.shadowStrength))
+        shadow.shadowBlurRadius = shadowTightRadius * 2
+        shadow.shadowOffset = .zero
+        return shadow
+    }
+
     /// The lightest the window background can ever be at this tint: the scrim
     /// painted over a white desktop.
     static func worstCaseBackground(_ tint: TintStyle) -> Contrast.RGB {
@@ -123,18 +153,30 @@ enum Theme {
 /// So the range starts where legibility does. There is still visible
 /// translucency across the four, just less of it than Stickies can afford.
 enum TintStyle: String, CaseIterable {
-    case mist       // lightest the contrast floor allows
-    case smoke
-    case slate      // default
-    case obsidian   // fully opaque
+    case mist       // lightest - barely tinted
+    case smoke      // light frosted
+    case slate      // default - balanced dark
+    case obsidian   // darkest - near-opaque
 
+    /// Stickies' values, kept. Readability is handled by the shadow below
+    /// rather than by making the window opaque, so the glass survives.
     var tintOpacity: Double {
         switch self {
-        case .mist:     return 0.88
-        case .smoke:    return 0.92
-        case .slate:    return 0.96
-        case .obsidian: return 1.00
+        case .mist:     return 0.00
+        case .smoke:    return 0.08
+        case .slate:    return 0.18
+        case .obsidian: return 0.38
         }
+    }
+
+    /// Opacity of the dark halo drawn under each glyph.
+    ///
+    /// Scales against the scrim: the less the window darkens what is behind
+    /// it, the more work the halo has to do. Never reaches zero, because even
+    /// the darkest tint here still lets a bright desktop through.
+    var shadowStrength: Double {
+        // 0.92 at mist, easing to 0.58 at obsidian.
+        0.92 - 0.9 * tintOpacity
     }
 
     /// Picker circle lightness (0 = black, 1 = white). Darker note, darker swatch.
