@@ -1,0 +1,11 @@
+MD.xcodeproj/
+.build/
+build/
+DerivedData/
+.DS_Store
+*.xcuserstate
+.claude/
+
+# Scratch notes folder used while developing. Whatever the app is pointed at
+# is the user's own writing and has no business in the repo.
+demo/

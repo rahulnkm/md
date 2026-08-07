@@ -1,0 +1,83 @@
+name: MD
+options:
+  bundleIdPrefix: com.rahulnkm
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  MD:
+    type: application
+    platform: macOS
+    sources:
+      - path: MD
+        excludes:
+          - "Fonts/**"
+      - path: MD/Fonts
+        type: folder
+        buildPhase: resources
+    info:
+      path: MD/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: md
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIconFile: ""
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: md
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: ""
+        NSPrincipalClass: NSApplication
+        ATSApplicationFontsPath: "Fonts"
+    entitlements:
+      path: MD/MD.entitlements
+    settings:
+      base:
+        PRODUCT_NAME: md
+        # Module stays MD so `@testable import MD` keeps working.
+        PRODUCT_MODULE_NAME: MD
+        PRODUCT_BUNDLE_IDENTIFIER: com.rahulnkm.md
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+
+  MDTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MDTests
+    dependencies:
+      - target: MD
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rahulnkm.md.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Pinned because the target is MD but the product is md.app; XcodeGen
+        # derives the default host path from the target name.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/md.app/Contents/MacOS/md"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  MD:
+    build:
+      targets:
+        MD: all
+        MDTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MDTests
