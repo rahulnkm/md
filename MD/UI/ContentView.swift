@@ -52,6 +52,15 @@ struct ContentView: View {
             for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refresh()
         }
+        .alert("Delete \(store.pendingDelete?.lastPathComponent ?? "")?",
+               isPresented: Binding(get: { store.pendingDelete != nil },
+                                    set: { if !$0 { store.cancelDelete() } })) {
+            Button("Cancel", role: .cancel) { store.cancelDelete() }
+            // `.destructive` is what makes the button red.
+            Button("Delete", role: .destructive) { store.confirmDelete() }
+        } message: {
+            Text("It moves to the Trash, so you can get it back from there.")
+        }
     }
 
     // MARK: - Detail

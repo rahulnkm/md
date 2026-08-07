@@ -63,6 +63,8 @@ struct SidebarView: View {
         .contextMenu {
             Button("Rename") { store.beginRename(file.url, from: .sidebar) }
             Button("Show in Finder") { store.revealInFinder(file.url) }
+            Divider()
+            Button("Delete…", role: .destructive) { store.requestDelete(file.url) }
         }
     }
 

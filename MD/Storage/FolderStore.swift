@@ -18,6 +18,8 @@ final class FolderStore: ObservableObject {
     @Published private(set) var revision = 0
     /// The in-progress rename, if any, and where it was started from.
     @Published var renaming: RenameTarget?
+    /// File awaiting delete confirmation. Set means the dialog is up.
+    @Published var pendingDelete: URL?
     @Published var banner: Banner?
     @Published var mode: Mode = .edit
     /// Defaults darker than Stickies' `.slate`. A sticky note is small and sits
@@ -30,7 +32,7 @@ final class FolderStore: ObservableObject {
         static let tint = "tintStyle"
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let fileManager = FileManager.default
 
     /// Modification date the buffer was read at, used to spot outside edits.
@@ -43,7 +45,10 @@ final class FolderStore: ObservableObject {
     /// Name a new file carries until it is renamed or takes one from a heading.
     static let defaultName = "Untitled"
 
-    init() {
+    /// `defaults` is injectable so tests get their own store rather than
+    /// picking up the real app's remembered folder and opening it.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         if let raw = defaults.string(forKey: Keys.tint), let saved = TintStyle(rawValue: raw) {
             tint = saved
         }
@@ -74,6 +79,18 @@ final class FolderStore: ObservableObject {
             banner = .folderUnavailable
             return
         }
+
+        // Switching folders has to drop the open file with it. Carrying the
+        // selection across leaves it pointing at a path the new listing knows
+        // nothing about, which reads to the user as "this file was deleted".
+        if folder != folderURL {
+            autosave?.cancel()
+            selection = nil
+            setBufferWithoutDirtying("")
+            loadedModifiedAt = nil
+            banner = nil
+        }
+
         folderURL = folder
         if remember { defaults.set(folder.path, forKey: Keys.folder) }
         refresh()
@@ -123,7 +140,7 @@ final class FolderStore: ObservableObject {
         awaitingSlug = false
         banner = nil
         guard let url else {
-            buffer = ""
+            setBufferWithoutDirtying("")
             loadedModifiedAt = nil
             return
         }
@@ -306,30 +323,135 @@ final class FolderStore: ObservableObject {
         let base = Self.sanitizeFilename(rawName)
         guard !base.isEmpty else { return }
 
-        let target = Self.normalized(folder.appendingPathComponent("\(base).md"))
-        guard target != Self.normalized(url) else { return }
-        guard !fileManager.fileExists(atPath: target.path) else {
+        let source = Self.normalized(url)
+        // Built literally, not through `normalized`. That resolves the path
+        // against the filesystem, and on a case-insensitive volume resolution
+        // hands back the spelling already on disk - so "Scratch.md" would come
+        // back as "scratch.md", match the source, and the rename would return
+        // as a no-op with nothing to show for it.
+        let target = folder.appendingPathComponent("\(base).md").standardizedFileURL
+        guard target.path != source.path else { return }
+
+        // macOS volumes are case-insensitive by default, so `fileExists`
+        // answers yes for "Scratch.md" when only "scratch.md" is there. Taking
+        // that at face value makes a file collide with itself and blocks any
+        // change of capitalisation. Only a genuinely different file counts.
+        if fileManager.fileExists(atPath: target.path), !isSameFile(target, source) {
             banner = .saveFailed("A file named \(base).md already exists.")
             return
         }
 
         // Flush the buffer first so a pending autosave can't write to the old
         // path after the move.
-        if Self.normalized(url) == selection { saveNow() }
+        if source == selection { saveNow() }
 
         do {
-            try fileManager.moveItem(at: url, to: target)
+            try move(from: source, to: target)
         } catch {
             banner = .saveFailed(error.localizedDescription)
             return
         }
 
-        if Self.normalized(url) == selection {
-            selection = target
-            loadedModifiedAt = modificationDate(of: target)
+        if source == selection {
+            // Safe to normalize now: the file exists under the new spelling,
+            // so resolution returns that rather than the old one, and this
+            // matches what the directory listing will report.
+            let renamed = Self.normalized(target)
+            selection = renamed
+            loadedModifiedAt = modificationDate(of: renamed)
             awaitingSlug = false
         }
         refresh()
+    }
+
+    /// Are these two paths the same file on disk? Compares the volume's own
+    /// identifier rather than the path text, which is the only way to tell a
+    /// case-only rename apart from a real collision.
+    private func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let idA = (try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]))?
+            .fileResourceIdentifier
+        let idB = (try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]))?
+            .fileResourceIdentifier
+        guard let idA, let idB else { return false }
+        return idA.isEqual(idB)
+    }
+
+    /// Moves a file, handling the case-only rename that a direct move refuses
+    /// on a case-insensitive volume because the destination "already exists".
+    /// Goes via a hidden staging name and puts the file back if the second
+    /// step fails, so there is no window where the file is missing.
+    private func move(from source: URL, to target: URL) throws {
+        guard fileManager.fileExists(atPath: target.path) else {
+            try fileManager.moveItem(at: source, to: target)
+            return
+        }
+
+        let staging = source.deletingLastPathComponent()
+            .appendingPathComponent(".md-rename-\(UUID().uuidString)")
+        try fileManager.moveItem(at: source, to: staging)
+        do {
+            try fileManager.moveItem(at: staging, to: target)
+        } catch {
+            try? fileManager.moveItem(at: staging, to: source)
+            throw error
+        }
+    }
+
+    // MARK: - Deleting
+
+    /// Asks for confirmation. Nothing is removed until `confirmDelete`.
+    func requestDelete(_ url: URL) {
+        pendingDelete = Self.normalized(url)
+    }
+
+    func cancelDelete() { pendingDelete = nil }
+
+    /// Moves the file to the Trash - never an unrecoverable delete - and lands
+    /// the selection on the neighbour that took its place.
+    func confirmDelete() {
+        guard let url = pendingDelete else { return }
+        pendingDelete = nil
+
+        // Note the row position before the list changes underneath us.
+        let position = files.firstIndex { $0.url == url }
+        let wasSelected = (url == selection)
+
+        if wasSelected {
+            // Drop the buffer first so a pending autosave cannot recreate the
+            // file at the path we are about to empty. Cleared here rather than
+            // through `select(nil)`, which short-circuits once selection is
+            // already nil and would leave the deleted file's text on screen.
+            autosave?.cancel()
+            isDirty = false
+            selection = nil
+            setBufferWithoutDirtying("")
+            loadedModifiedAt = nil
+        }
+
+        do {
+            try trash(url)
+        } catch {
+            if wasSelected { select(url) }
+            banner = .saveFailed(error.localizedDescription)
+            return
+        }
+
+        banner = nil
+        refresh()
+
+        guard wasSelected else { return }
+        // Land on whatever slid into that row, or the last file if it was the
+        // bottom one.
+        if let position, !files.isEmpty {
+            select(files[min(position, files.count - 1)].url)
+        } else {
+            select(files.first?.url)
+        }
+    }
+
+    /// Seam so tests can delete without filling the real Trash.
+    var trash: (URL) throws -> Void = { url in
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
     }
 
     /// Reveals the file in Finder, with the file itself selected.

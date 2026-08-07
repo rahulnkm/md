@@ -13,6 +13,7 @@ struct RenameField: View {
     let onCancel: () -> Void
 
     @State private var text: String = ""
+    @State private var finished = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -24,7 +25,7 @@ struct RenameField: View {
             .focused($focused)
             .onSubmit { commit() }
             // Escape reaches the field as a cancel action rather than a key press.
-            .onExitCommand { onCancel() }
+            .onExitCommand { finish(onCancel) }
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(
@@ -44,9 +45,20 @@ struct RenameField: View {
     private func commit() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != initialName else {
-            onCancel()
+            finish(onCancel)
             return
         }
-        onCommit(trimmed)
+        finish { onCommit(trimmed) }
+    }
+
+    /// Runs the handler once and once only.
+    ///
+    /// Return commits, which tears the field down, which drops focus, which
+    /// would fire the focus-loss commit a second time against a path that has
+    /// already moved.
+    private func finish(_ action: () -> Void) {
+        guard !finished else { return }
+        finished = true
+        action()
     }
 }
