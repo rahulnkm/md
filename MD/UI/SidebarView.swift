@@ -34,14 +34,15 @@ struct SidebarView: View {
                 } else {
                     Text(file.name)
                         .font(Theme.uiFont(size: 12))
-                        .foregroundColor(Theme.text.opacity(isSelected ? 1.0 : 0.75))
+                        .foregroundColor(Theme.text.opacity(isSelected ? Theme.primaryTextOpacity
+                                                      : Theme.secondaryTextOpacity))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
 
                 Text(Self.relativeDate(file.modifiedAt))
                     .font(Theme.uiFont(size: 10))
-                    .foregroundColor(Theme.text.opacity(0.45))
+                    .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
             }
 
             Spacer(minLength: 0)

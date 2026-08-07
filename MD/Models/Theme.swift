@@ -64,11 +64,47 @@ enum Theme {
 
     static let codeBackground = text.opacity(0.06)
     static let nsCodeBackground = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255, alpha: 0.06)
-    /// Markdown syntax characters recede to this opacity while editing.
-    static let syntaxOpacity: CGFloat = 0.4
-    static let nsSyntax = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255, alpha: syntaxOpacity)
-    /// Geist Mono has no italic face; italics carry through opacity instead.
-    static let italicOpacity: CGFloat = 0.72
+
+    // MARK: - Contrast
+
+    static let textHex: UInt32 = 0xE8E3D8
+    static let backgroundHex: UInt32 = 0x2C2A33
+
+    /// Floor for any text opacity.
+    ///
+    /// The window is translucent, so the real background is the desktop and
+    /// the only ratio that can be promised is the worst case - the tint over
+    /// pure white. At the lightest tint, text below this fails WCAG AA. Every
+    /// level here sits above it, and `ContrastTests` proves it rather than
+    /// taking anyone's word.
+    static let minimumTextOpacity: CGFloat = 0.70
+
+    /// Full-strength body text.
+    static let primaryTextOpacity: CGFloat = 1.0
+    /// Supporting text: filenames not selected, quotes, the mode toggle.
+    static let secondaryTextOpacity: CGFloat = 0.82
+    /// The quietest text allowed: dates, list markers, placeholders.
+    static let tertiaryTextOpacity: CGFloat = 0.72
+    /// Markdown syntax characters recede while editing, but stay readable.
+    static let syntaxOpacity: CGFloat = 0.72
+    static let nsSyntax = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255,
+                                  alpha: syntaxOpacity)
+    /// Geist ships no italic face; italics carry through opacity instead.
+    static let italicOpacity: CGFloat = 0.82
+
+    /// The lightest the window background can ever be at this tint: the scrim
+    /// painted over a white desktop.
+    static func worstCaseBackground(_ tint: TintStyle) -> Contrast.RGB {
+        Contrast.RGB.hex(backgroundHex).over(Contrast.white, alpha: tint.tintOpacity)
+    }
+
+    /// Contrast ratio of text at `opacity` against that worst case.
+    static func worstCaseRatio(textOpacity: CGFloat, tint: TintStyle) -> Double {
+        let background = worstCaseBackground(tint)
+        let foreground = Contrast.RGB.hex(textHex)
+            .over(background, alpha: Double(textOpacity))
+        return Contrast.ratio(foreground, background)
+    }
 
     static let blockSpacing: CGFloat = 12
     static let sidebarWidth: CGFloat = 200
@@ -76,19 +112,28 @@ enum Theme {
 }
 
 /// How much the dark palette tints the frosted-glass background.
-/// Same four styles and opacities as Stickies.
+///
+/// The four names come from Stickies, but not the values. Stickies runs
+/// 0.00 / 0.08 / 0.18 / 0.38, which works for a small note you can drag onto
+/// a dark patch of desktop. Behind a full window of body text those let
+/// whatever is behind through, and against a light desktop every one of them
+/// - including the darkest - falls under WCAG AA. Body text needs the scrim
+/// at 0.725 before it clears 4.5:1 over white.
+///
+/// So the range starts where legibility does. There is still visible
+/// translucency across the four, just less of it than Stickies can afford.
 enum TintStyle: String, CaseIterable {
-    case mist       // lightest - barely tinted
-    case smoke      // light frosted
-    case slate      // default - balanced dark
-    case obsidian   // darkest - near-opaque
+    case mist       // lightest the contrast floor allows
+    case smoke
+    case slate      // default
+    case obsidian   // fully opaque
 
     var tintOpacity: Double {
         switch self {
-        case .mist:     return 0.00
-        case .smoke:    return 0.08
-        case .slate:    return 0.18
-        case .obsidian: return 0.38
+        case .mist:     return 0.88
+        case .smoke:    return 0.92
+        case .slate:    return 0.96
+        case .obsidian: return 1.00
         }
     }
 

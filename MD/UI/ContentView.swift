@@ -76,7 +76,7 @@ struct ContentView: View {
                 Spacer()
                 Text("No file selected")
                     .font(Theme.uiFont(size: 12))
-                    .foregroundColor(Theme.text.opacity(0.4))
+                    .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
                 Spacer()
             } else if store.mode == .edit {
                 EditorView(text: store.buffer,
@@ -103,7 +103,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Text(banner.message)
                 .font(Theme.uiFont(size: 11))
-                .foregroundColor(Theme.text.opacity(0.9))
+                .foregroundColor(Theme.text)
 
             Spacer(minLength: 0)
 
@@ -148,10 +148,10 @@ struct ContentView: View {
         VStack(spacing: 14) {
             Text("md")
                 .font(Theme.uiSemibold(size: 20))
-                .foregroundColor(Theme.text.opacity(0.9))
+                .foregroundColor(Theme.text)
             Text("Pick the folder your markdown files live in.")
                 .font(Theme.uiFont(size: 12))
-                .foregroundColor(Theme.text.opacity(0.55))
+                .foregroundColor(Theme.text.opacity(Theme.secondaryTextOpacity))
             bannerButton("Choose folder") { store.chooseFolder() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -192,7 +192,7 @@ struct ContentView: View {
                     } else {
                         Text(selection.lastPathComponent)
                             .font(Theme.uiFont(size: 11))
-                            .foregroundColor(Theme.text.opacity(0.5))
+                            .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
                             .lineLimit(1)
                             .contentShape(Rectangle())
                             .onTapGesture(count: 2) { store.beginRename(selection, from: .titleBar) }
@@ -207,7 +207,7 @@ struct ContentView: View {
                     Button(action: { store.toggleMode() }) {
                         Text(store.mode == .edit ? "Preview" : "Edit")
                             .font(Theme.uiFont(size: 11))
-                            .foregroundColor(Theme.text.opacity(0.8))
+                            .foregroundColor(Theme.text.opacity(Theme.secondaryTextOpacity))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -218,7 +218,7 @@ struct ContentView: View {
             }
             // Stays up during a rename, or the text field would disappear from
             // under the cursor the moment it left the strip.
-            .opacity(chromeVisible ? 0.9 : 0)
+            .opacity(chromeVisible ? 1 : 0)
             .allowsHitTesting(chromeVisible)
             .animation(.easeInOut(duration: 0.12), value: chromeVisible)
         }
