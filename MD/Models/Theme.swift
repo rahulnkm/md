@@ -1,13 +1,14 @@
 import SwiftUI
 import AppKit
 
-/// Carried over from Stickies' `NoteTheme` so the two apps read as siblings.
-/// Values above the `Markdown` mark are unchanged from that repo.
+/// Metrics and type carried over from Stickies' `NoteTheme`.
+///
+/// The colours are not. Stickies paints a fixed off-white on a fixed dark
+/// scrim, which only works while something dark happens to be behind the
+/// glass. Here the surface is a system `Material` and the text is a vibrant
+/// system colour, so the window server resolves both against the real
+/// backdrop.
 enum Theme {
-    static let bg = Color(red: 0x2C/255, green: 0x2A/255, blue: 0x33/255)
-    static let text = Color(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255)
-    static let nsBg = NSColor(red: 0x2C/255, green: 0x2A/255, blue: 0x33/255, alpha: 1)
-    static let nsText = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255, alpha: 1)
     static let cornerRadius: CGFloat = 6
     static let innerPadding: CGFloat = 16
     static let topPadding: CGFloat = 30   // room so hover-reveal chrome doesn't collide with line one
@@ -62,43 +63,68 @@ enum Theme {
     /// carry their weight through SemiBold alone.
     static let headingSizes: [CGFloat] = [24, 19, 16, 14, 14, 14]
 
-    static let codeBackground = text.opacity(0.06)
-    static let nsCodeBackground = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255, alpha: 0.06)
-    /// Markdown syntax characters recede to this opacity while editing.
-    static let syntaxOpacity: CGFloat = 0.4
-    static let nsSyntax = NSColor(red: 0xE8/255, green: 0xE3/255, blue: 0xD8/255, alpha: syntaxOpacity)
-    /// Geist Mono has no italic face; italics carry through opacity instead.
-    static let italicOpacity: CGFloat = 0.72
+    static let codeBackground = Color.primary.opacity(0.08)
 
     static let blockSpacing: CGFloat = 12
     static let sidebarWidth: CGFloat = 200
-    static let hairline = text.opacity(0.08)
+    static let hairline = Color.primary.opacity(0.12)
 }
 
-/// How much the dark palette tints the frosted-glass background.
-/// Same four styles and opacities as Stickies.
+/// The four surfaces, running light to dark.
+///
+/// Two light ones carrying dark text, two dark ones carrying white. Each
+/// declares its own colour scheme rather than following the system, so the
+/// choice is the user's and the pairing of surface to text can never come
+/// apart - which is what made a single fixed off-white unreadable on the
+/// lighter end.
 enum TintStyle: String, CaseIterable {
-    case mist       // lightest - barely tinted
-    case smoke      // light frosted
-    case slate      // default - balanced dark
-    case obsidian   // darkest - near-opaque
+    case mist       // lightest glass, dark text
+    case smoke      // light glass, dark text
+    case slate      // dark glass, white text
+    case obsidian   // darkest, white text
 
-    var tintOpacity: Double {
+    /// Pins the surface light or dark. Vibrant foreground styles resolve
+    /// against it, so text follows the surface automatically.
+    var colorScheme: ColorScheme {
         switch self {
-        case .mist:     return 0.00
-        case .smoke:    return 0.08
-        case .slate:    return 0.18
-        case .obsidian: return 0.38
+        case .mist, .smoke:     return .light
+        case .slate, .obsidian: return .dark
+        }
+    }
+
+    /// The frosted layer itself.
+    ///
+    /// A system `Material` rather than a colour over a blur: the window server
+    /// knows what is behind the glass and blends against it, which is the only
+    /// way to stay legible over an unknown backdrop without asking for Screen
+    /// Recording permission to go and look.
+    var material: Material {
+        switch self {
+        case .mist:     return .ultraThinMaterial
+        case .smoke:    return .thinMaterial
+        case .slate:    return .regularMaterial
+        case .obsidian: return .thickMaterial
+        }
+    }
+
+    /// Stickies' `#2C2A33`, laid over the thickest glass so the darkest option
+    /// is the original dark rather than whatever the system material happens
+    /// to resolve to.
+    var overlay: Color? {
+        switch self {
+        case .obsidian: return Color(red: 0x2C/255, green: 0x2A/255, blue: 0x33/255).opacity(0.82)
+        case .slate:    return Color(red: 0x2C/255, green: 0x2A/255, blue: 0x33/255).opacity(0.30)
+        case .mist, .smoke: return nil
         }
     }
 
     /// Picker circle lightness (0 = black, 1 = white). Darker note, darker swatch.
     var swatchLightness: Double {
         switch self {
-        case .mist:     return 0.92
-        case .smoke:    return 0.70
-        case .slate:    return 0.35
-        case .obsidian: return 0.15
+        case .mist:     return 0.97
+        case .smoke:    return 0.78
+        case .slate:    return 0.34
+        case .obsidian: return 0.11
         }
     }
 }

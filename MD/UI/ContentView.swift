@@ -14,8 +14,13 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            BlurView()
-            Theme.bg.opacity(store.tint.tintOpacity)
+            // Vibrancy, not a painted colour: foreground styles layered on a
+            // Material are blended against the real backdrop by the window
+            // server, so text stays legible over a wallpaper the app cannot see.
+            Rectangle().fill(store.tint.material)
+            if let overlay = store.tint.overlay {
+                Rectangle().fill(overlay)
+            }
 
             if store.folderURL == nil {
                 emptyState
@@ -40,6 +45,9 @@ struct ContentView: View {
                 .frame(height: Theme.topPadding)
         }
         .ignoresSafeArea()
+        // Each surface pins its own scheme, so the window stops following the
+        // system and the text always matches the glass it sits on.
+        .preferredColorScheme(store.tint.colorScheme)
         // Tracked on the whole window and filtered by height. `onHover` on the
         // strip alone never fires where an NSView sits underneath it.
         .onContinuousHover { phase in
@@ -76,7 +84,7 @@ struct ContentView: View {
                 Spacer()
                 Text("No file selected")
                     .font(Theme.uiFont(size: 12))
-                    .foregroundColor(Theme.text.opacity(0.4))
+                    .foregroundColor(Color.primary.opacity(0.55))
                 Spacer()
             } else if store.mode == .edit {
                 EditorView(text: store.buffer,
@@ -103,7 +111,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Text(banner.message)
                 .font(Theme.uiFont(size: 11))
-                .foregroundColor(Theme.text.opacity(0.9))
+                .foregroundColor(Color.primary)
 
             Spacer(minLength: 0)
 
@@ -131,12 +139,12 @@ struct ContentView: View {
         Button(action: action) {
             Text(title)
                 .font(Theme.uiFont(size: 11))
-                .foregroundColor(Theme.text)
+                .foregroundColor(.primary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Theme.text.opacity(0.12))
+                        .fill(Color.primary.opacity(0.12))
                 )
         }
         .buttonStyle(.plain)
@@ -148,10 +156,10 @@ struct ContentView: View {
         VStack(spacing: 14) {
             Text("md")
                 .font(Theme.uiSemibold(size: 20))
-                .foregroundColor(Theme.text.opacity(0.9))
+                .foregroundColor(Color.primary)
             Text("Pick the folder your markdown files live in.")
                 .font(Theme.uiFont(size: 12))
-                .foregroundColor(Theme.text.opacity(0.55))
+                .foregroundColor(Color.secondary)
             bannerButton("Choose folder") { store.chooseFolder() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -192,7 +200,7 @@ struct ContentView: View {
                     } else {
                         Text(selection.lastPathComponent)
                             .font(Theme.uiFont(size: 11))
-                            .foregroundColor(Theme.text.opacity(0.5))
+                            .foregroundColor(Color.secondary)
                             .lineLimit(1)
                             .contentShape(Rectangle())
                             .onTapGesture(count: 2) { store.beginRename(selection, from: .titleBar) }
@@ -207,7 +215,7 @@ struct ContentView: View {
                     Button(action: { store.toggleMode() }) {
                         Text(store.mode == .edit ? "Preview" : "Edit")
                             .font(Theme.uiFont(size: 11))
-                            .foregroundColor(Theme.text.opacity(0.8))
+                            .foregroundColor(Color.primary.opacity(0.85))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -251,7 +259,7 @@ private struct TintSwatch: View {
                 .fill(Color(white: style.swatchLightness))
                 .frame(width: 8, height: 8)
                 .overlay(
-                    Circle().stroke(Theme.text, lineWidth: isSelected ? 1.0 : 0)
+                    Circle().stroke(Color.primary, lineWidth: isSelected ? 1.0 : 0)
                 )
                 // Tight horizontal gap; vertical padding keeps the hit target
                 // tall enough to click comfortably.

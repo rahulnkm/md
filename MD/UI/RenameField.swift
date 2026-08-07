@@ -20,7 +20,7 @@ struct RenameField: View {
         TextField("", text: $text)
             .textFieldStyle(.plain)
             .font(Theme.uiFont(size: size))
-            .foregroundColor(Theme.text)
+            .foregroundColor(.primary)
             .multilineTextAlignment(alignment)
             .focused($focused)
             .onSubmit { commit() }
@@ -30,7 +30,7 @@ struct RenameField: View {
             .padding(.vertical, 1)
             .background(
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(Theme.text.opacity(0.14))
+                    .fill(Color.primary.opacity(0.14))
             )
             .onAppear {
                 text = initialName

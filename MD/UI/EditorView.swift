@@ -35,7 +35,7 @@ struct EditorView: NSViewRepresentable {
         storage.addLayoutManager(layout)
         layout.addTextContainer(container)
 
-        let textView = NSTextView(frame: .zero, textContainer: container)
+        let textView = VibrantTextView(frame: .zero, textContainer: container)
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -48,8 +48,8 @@ struct EditorView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.drawsBackground = false
         textView.backgroundColor = .clear
-        textView.textColor = Theme.nsText
-        textView.insertionPointColor = Theme.nsText
+        textView.textColor = .labelColor
+        textView.insertionPointColor = .labelColor
         textView.font = Theme.font()
         textView.textContainerInset = .zero
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -107,7 +107,7 @@ struct EditorView: NSViewRepresentable {
         paragraph.lineHeightMultiple = Theme.lineHeightMultiple
         return [
             .font: Theme.font(),
-            .foregroundColor: Theme.nsText,
+            .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraph,
             .kern: Theme.tracking,
             // Geist Mono collapses `...` into a narrower ellipsis ligature that
@@ -141,11 +141,17 @@ struct EditorView: NSViewRepresentable {
 
             layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
             for range in SyntaxRanges.find(in: textView.string) {
-                layout.addTemporaryAttributes([.foregroundColor: Theme.nsSyntax],
+                layout.addTemporaryAttributes([.foregroundColor: NSColor.tertiaryLabelColor],
                                               forCharacterRange: range)
             }
         }
     }
+}
+
+/// An `NSTextView` that opts into vibrancy, so its glyphs are blended against
+/// whatever is behind the window rather than painted at a fixed colour.
+private final class VibrantTextView: NSTextView {
+    override var allowsVibrancy: Bool { true }
 }
 
 /// Locates the markdown syntax characters that should recede while editing.

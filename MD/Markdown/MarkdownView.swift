@@ -39,7 +39,7 @@ struct MarkdownView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.marker)
                             .font(Theme.uiSans())
-                            .foregroundColor(Theme.text.opacity(0.45))
+                            .foregroundColor(.secondary)
                             .frame(minWidth: 16, alignment: .trailing)
                         Text(Inline.attributed(item.text))
                             .lineSpacing(Theme.proseLineSpacing)
@@ -52,7 +52,7 @@ struct MarkdownView: View {
         case let .quote(text):
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
-                    .fill(Theme.text.opacity(0.3))
+                    .fill(Color.secondary)
                     .frame(width: 2)
                 Text(Inline.attributed(text))
                     .lineSpacing(Theme.proseLineSpacing)
@@ -65,7 +65,7 @@ struct MarkdownView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(Theme.uiFont())
-                    .foregroundColor(Theme.text)
+                    .foregroundColor(.primary)
                     .textSelection(.enabled)
                     .padding(10)
             }
@@ -76,7 +76,7 @@ struct MarkdownView: View {
 
         case .rule:
             Rectangle()
-                .fill(Theme.text.opacity(0.15))
+                .fill(Color.secondary.opacity(0.4))
                 .frame(height: 1)
                 .padding(.vertical, 4)
         }
@@ -103,14 +103,12 @@ enum Inline {
             // Code keeps the monospaced face inside proportional prose, a point
             // smaller so it doesn't tower over the text around it.
             piece.font = Theme.uiFont(size: size - 1)
-            piece.foregroundColor = Theme.text
+            piece.foregroundColor = .primary
             piece.backgroundColor = Theme.codeBackground
         } else {
             piece.font = heavy ? Theme.uiSansSemibold(size: size) : Theme.uiSans(size: size)
             // Geist ships no italic face, so italics read through opacity.
-            piece.foregroundColor = span.italic
-                ? Theme.text.opacity(Theme.italicOpacity)
-                : Theme.text
+            piece.foregroundColor = span.italic ? .secondary : .primary
         }
 
         if let target = span.link, let url = Inline.safeLink(target) {

@@ -34,14 +34,14 @@ struct SidebarView: View {
                 } else {
                     Text(file.name)
                         .font(Theme.uiFont(size: 12))
-                        .foregroundColor(Theme.text.opacity(isSelected ? 1.0 : 0.75))
+                        .foregroundColor(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
 
                 Text(Self.relativeDate(file.modifiedAt))
                     .font(Theme.uiFont(size: 10))
-                    .foregroundColor(Theme.text.opacity(0.45))
+                    .foregroundColor(.secondary)
             }
 
             Spacer(minLength: 0)
@@ -56,7 +56,7 @@ struct SidebarView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.text.opacity(isSelected ? 0.10 : 0))
+                .fill(Color.primary.opacity(isSelected ? 0.12 : 0))
         )
         .contentShape(Rectangle())
         .onTapGesture { store.select(file.url) }
