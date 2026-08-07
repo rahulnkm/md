@@ -12,8 +12,6 @@ struct EditorView: NSViewRepresentable {
     let text: String
     /// Changes whenever the store replaces the buffer from outside the editor.
     let revision: Int
-    /// Drives the legibility halo: the lighter the window, the darker the halo.
-    let tint: TintStyle
     let onChange: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -58,18 +56,17 @@ struct EditorView: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
-        textView.typingAttributes = Self.typingAttributes(tint)
+        textView.typingAttributes = Self.typingAttributes()
         textView.delegate = context.coordinator
 
         textView.string = text
         textView.textStorage?.addAttributes(
-            Self.typingAttributes(tint),
+            Self.typingAttributes(),
             range: NSRange(location: 0, length: (text as NSString).length)
         )
 
         context.coordinator.textView = textView
         context.coordinator.revision = revision
-        context.coordinator.tint = tint
         context.coordinator.applyDimming()
 
         scroll.documentView = textView
@@ -86,23 +83,11 @@ struct EditorView: NSViewRepresentable {
             if textView.string != text {
                 textView.string = text
                 textView.textStorage?.addAttributes(
-                    Self.typingAttributes(tint),
+                    Self.typingAttributes(),
                     range: NSRange(location: 0, length: (text as NSString).length)
                 )
                 textView.setSelectedRange(NSRange(location: 0, length: 0))
             }
-            context.coordinator.applyDimming()
-        }
-
-        // Changing tint changes how hard the halo has to work, so the shadow
-        // has to be restamped across the whole buffer.
-        if context.coordinator.tint != tint {
-            context.coordinator.tint = tint
-            textView.typingAttributes = Self.typingAttributes(tint)
-            textView.textStorage?.addAttributes(
-                Self.typingAttributes(tint),
-                range: NSRange(location: 0, length: (textView.string as NSString).length)
-            )
             context.coordinator.applyDimming()
         }
 
@@ -117,7 +102,7 @@ struct EditorView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
 
-    static func typingAttributes(_ tint: TintStyle) -> [NSAttributedString.Key: Any] {
+    static func typingAttributes() -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = Theme.lineHeightMultiple
         return [
@@ -125,8 +110,6 @@ struct EditorView: NSViewRepresentable {
             .foregroundColor: Theme.nsText,
             .paragraphStyle: paragraph,
             .kern: Theme.tracking,
-            // Same halo the SwiftUI side draws, so both modes read alike.
-            .shadow: Theme.nsShadow(tint),
             // Geist Mono collapses `...` into a narrower ellipsis ligature that
             // visually overlaps prior glyphs, so ligatures stay off.
             .ligature: 0,
@@ -137,7 +120,6 @@ struct EditorView: NSViewRepresentable {
         let onChange: (String) -> Void
         weak var textView: NSTextView?
         var revision = -1
-        var tint: TintStyle?
 
         init(onChange: @escaping (String) -> Void) { self.onChange = onChange }
 

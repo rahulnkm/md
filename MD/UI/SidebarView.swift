@@ -15,7 +15,6 @@ struct SidebarView: View {
             .padding(.horizontal, 8)
             .padding(.top, Theme.topPadding)
             .padding(.bottom, Theme.innerPadding)
-            .legibilityShadow(store.tint)
         }
         .scrollContentBackground(.hidden)
     }
@@ -35,15 +34,14 @@ struct SidebarView: View {
                 } else {
                     Text(file.name)
                         .font(Theme.uiFont(size: 12))
-                        .foregroundColor(Theme.text.opacity(isSelected ? Theme.primaryTextOpacity
-                                                      : Theme.secondaryTextOpacity))
+                        .foregroundColor(Theme.text.opacity(isSelected ? 1.0 : 0.75))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
 
                 Text(Self.relativeDate(file.modifiedAt))
                     .font(Theme.uiFont(size: 10))
-                    .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
+                    .foregroundColor(Theme.text.opacity(0.45))
             }
 
             Spacer(minLength: 0)

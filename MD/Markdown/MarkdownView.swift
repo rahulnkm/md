@@ -39,7 +39,7 @@ struct MarkdownView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.marker)
                             .font(Theme.uiSans())
-                            .foregroundColor(Theme.text.opacity(Theme.tertiaryTextOpacity))
+                            .foregroundColor(Theme.text.opacity(0.45))
                             .frame(minWidth: 16, alignment: .trailing)
                         Text(Inline.attributed(item.text))
                             .lineSpacing(Theme.proseLineSpacing)
@@ -56,7 +56,7 @@ struct MarkdownView: View {
                     .frame(width: 2)
                 Text(Inline.attributed(text))
                     .lineSpacing(Theme.proseLineSpacing)
-                    .opacity(Theme.secondaryTextOpacity)
+                    .opacity(0.75)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .fixedSize(horizontal: false, vertical: true)
