@@ -5,7 +5,7 @@ A lightweight markdown editor for macOS. Visual sibling to
 same Geist, same hover-reveal chrome - pointed at files on disk instead of
 floating notes.
 
-- Pick a folder once. Every `.md` in it shows up in the sidebar.
+- Pick a folder once. Every `.md` in it shows up in the sidebar, newest first.
 - Two modes: raw markdown to write in, rendered to read. `⌘E` flips.
 - Autosaves 800ms after you stop typing.
 - Rename from the sidebar's right-click menu, or by double-clicking the
@@ -17,11 +17,24 @@ floating notes.
 
 | Shortcut | Action |
 |---|---|
+| `⌘K` | Search all files |
+| `⌘F` or `⌃F` | Find in the open file |
 | `⌘E` | Toggle Edit / Preview |
 | `⌘S` | Save now |
 | `⌘N` | New file |
 | `⌘O` | Choose folder |
 | `⌘⌥←` `⌘⌥→` | Previous / next file |
+
+## Search
+
+The magnifier at the bottom of the sidebar, or `⌘K`, opens a search across
+every file in the folder. It matches keywords in names and bodies, and
+fuzzily - `mtg` finds `meeting-notes`, a typo still lands. Arrow keys move,
+Return opens, Escape closes. With nothing typed it lists files newest first.
+
+`⌘F` (or `⌃F`) finds inside the open file, using the standard macOS find bar:
+exact keyword only, matches highlighted as you type, Return for the next one.
+From Preview it switches to Edit first, since that is where the text is.
 
 ## Naming
 
@@ -31,12 +44,18 @@ heading. After that the name is fixed - rename it yourself and it stays.
 
 ## Markdown
 
-Headings, bold, italic, inline code, links, bullet and ordered lists, block
-quotes, fenced code blocks, horizontal rules.
+Headings, bold, italic, inline code, links, images, bullet and ordered lists,
+block quotes, fenced code blocks, horizontal rules.
 
 A lone newline inside a paragraph is a soft wrap and joins, so hard-wrapped
 files read as flowing prose. For a deliberate break, end the line with two
 spaces or a backslash.
+
+An image on its own line - `![](assets/shot.png)` - renders in Preview, fit
+to the column. Paste or drop an image in Edit mode and the app writes it as
+a PNG into an `assets/` folder next to your notes and inserts that line for
+you. The `.md` stays plain text; the picture is a file beside it, at a
+relative path Obsidian and GitHub both resolve.
 
 Tables, footnotes, and HTML passthrough are not supported and render as plain
 text rather than breaking.

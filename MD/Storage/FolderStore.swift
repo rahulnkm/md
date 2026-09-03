@@ -22,6 +22,11 @@ final class FolderStore: ObservableObject {
     @Published var pendingDelete: URL?
     @Published var banner: Banner?
     @Published var mode: Mode = .edit
+    /// True while the search modal is up.
+    @Published var searching = false
+    /// Bumped each time the user asks to find inside the open file. The
+    /// editor watches it and raises the find bar.
+    @Published private(set) var findRequest = 0
     /// Defaults darker than Stickies' `.slate`. A sticky note is small and sits
     /// over whatever happens to be behind it; a full window over a bright
     /// desktop needs more tint before body text is comfortable to read.
@@ -122,7 +127,14 @@ final class FolderStore: ObservableObject {
                 // URLs do not. Both sides go through `normalized` so they compare equal.
                 return MDFile(url: Self.normalized(url), modifiedAt: date)
             }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            // Newest first, so the file you just touched is at the top. Name
+            // breaks ties, which keeps the order stable for files written in
+            // the same instant.
+            .sorted {
+                $0.modifiedAt == $1.modifiedAt
+                    ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                    : $0.modifiedAt > $1.modifiedAt
+            }
 
         // The open file may have been deleted from under us.
         if let current = selection, !files.contains(where: { $0.url == current }) {
@@ -201,6 +213,51 @@ final class FolderStore: ObservableObject {
 
     func toggleMode() {
         mode = (mode == .edit) ? .view : .edit
+    }
+
+    // MARK: - Search
+
+    func openSearch() {
+        guard folderURL != nil else { return }
+        searching = true
+    }
+
+    func closeSearch() { searching = false }
+
+    /// Every file in the folder with its body, in sidebar order (newest
+    /// first), so an empty query lists what was touched last. The open file contributes its
+    /// unsaved buffer rather than what is on disk.
+    func searchDocuments() -> [SearchDocument] {
+        files.compactMap { file in
+            let body: String
+            if file.url == selection {
+                body = buffer
+            } else if let text = try? String(contentsOf: file.url, encoding: .utf8) {
+                body = text
+            } else {
+                return nil
+            }
+            return SearchDocument(url: file.url, name: file.name, body: body)
+        }
+    }
+
+    /// Raises the editor's find bar. Preview has nothing to search in, so it
+    /// flips to Edit first; the bump is deferred a turn so the editor exists
+    /// to hear it.
+    func findInFile() {
+        guard selection != nil else { return }
+        searching = false
+        if mode != .edit {
+            mode = .edit
+            // SwiftUI builds the editor on a later transaction, not the next
+            // run-loop turn; a bump that lands before it exists is recorded
+            // as the baseline and never acted on.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.findRequest += 1
+            }
+        } else {
+            findRequest += 1
+        }
     }
 
     // MARK: - Saving
@@ -282,6 +339,54 @@ final class FolderStore: ObservableObject {
         loadedModifiedAt = modificationDate(of: target)
         banner = nil
         refresh()
+    }
+
+    // MARK: - Images
+
+    /// Folder, inside the notes folder, where pasted images are kept.
+    static let assetsFolderName = "assets"
+
+    /// Writes pasted or dropped images to disk and returns the markdown that
+    /// refers to them, one `![](assets/…)` per line. Nil when there is no
+    /// open file to attach them to, or nothing could be written.
+    ///
+    /// The `.md` stays plain text - that is the point of the app - so the
+    /// bytes go next to it rather than into it, as a PNG named after the
+    /// note. Obsidian and GitHub both resolve the same relative path.
+    func saveImages(_ images: [NSImage]) -> String? {
+        let lines = images.compactMap { saveImage($0) }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    func saveImage(_ image: NSImage) -> String? {
+        guard let folder = folderURL, let selection, let png = Self.pngData(image) else { return nil }
+        let assets = folder.appendingPathComponent(Self.assetsFolderName, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: assets, withIntermediateDirectories: true)
+            let stem = selection.deletingPathExtension().lastPathComponent
+            let target = uniqueURL(named: "\(stem)-\(Self.imageTimestamp.string(from: Date()))",
+                                   extension: "png", in: assets)
+            try png.write(to: target, options: .atomic)
+            return "![](\(Self.assetsFolderName)/\(target.lastPathComponent))"
+        } catch {
+            banner = .saveFailed(error.localizedDescription)
+            return nil
+        }
+    }
+
+    private static let imageTimestamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
+    /// PNG, whatever the pasteboard handed over, so a screenshot from the
+    /// clipboard and a JPEG dragged from Finder come out the same way.
+    nonisolated static func pngData(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     // MARK: - New file
@@ -476,11 +581,11 @@ final class FolderStore: ObservableObject {
 
     /// `Untitled.md`, then `Untitled (1).md`, `Untitled (2).md`, and so on -
     /// the same shape Finder uses for copies.
-    private func uniqueURL(named base: String, in folder: URL) -> URL {
-        var candidate = folder.appendingPathComponent("\(base).md")
+    private func uniqueURL(named base: String, extension ext: String = "md", in folder: URL) -> URL {
+        var candidate = folder.appendingPathComponent("\(base).\(ext)")
         var counter = 1
         while fileManager.fileExists(atPath: candidate.path) {
-            candidate = folder.appendingPathComponent("\(base) (\(counter)).md")
+            candidate = folder.appendingPathComponent("\(base) (\(counter)).\(ext)")
             counter += 1
         }
         return candidate

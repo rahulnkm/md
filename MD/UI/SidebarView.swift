@@ -5,18 +5,50 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var store: FolderStore
 
+    @State private var searchHovering = false
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 1) {
-                ForEach(store.files) { file in
-                    row(for: file)
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    ForEach(store.files) { file in
+                        row(for: file)
+                    }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, Theme.topPadding)
+                .padding(.bottom, Theme.innerPadding)
             }
-            .padding(.horizontal, 8)
-            .padding(.top, Theme.topPadding)
-            .padding(.bottom, Theme.innerPadding)
+            .scrollContentBackground(.hidden)
+
+            footer
         }
-        .scrollContentBackground(.hidden)
+    }
+
+    /// One control, pinned under the list where the thumb and the eye both
+    /// land: search across every file.
+    private var footer: some View {
+        HStack {
+            Button(action: { store.openSearch() }) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.primary)
+                    .opacity(searchHovering ? 0.9 : 0.5)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.primary.opacity(searchHovering ? 0.10 : 0))
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { searchHovering = $0 }
+            .animation(.easeInOut(duration: 0.12), value: searchHovering)
+            .help("Search all files (⌘K)")
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder

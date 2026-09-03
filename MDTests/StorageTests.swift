@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import MD
 
@@ -87,13 +88,28 @@ final class FolderStoreTests: XCTestCase {
         XCTAssertNil(store.banner)
     }
 
-    func testListsOnlyMarkdownFilesSorted() {
-        write("b.md", "b")
-        write("a.md", "a")
+    func testListsOnlyMarkdownFilesNewestFirst() {
+        write("old.md", "b")
+        write("new.md", "a")
         write("notes.txt", "ignored")
+        try? FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000)],
+                                               ofItemAtPath: folder.appendingPathComponent("old.md").path)
+        try? FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)],
+                                               ofItemAtPath: folder.appendingPathComponent("new.md").path)
 
         let store = makeStore()
-        XCTAssertEqual(store.files.map(\.name), ["a", "b"])
+        XCTAssertEqual(store.files.map(\.name), ["new", "old"])
+    }
+
+    /// Files touched in the same instant fall back to name order, so the
+    /// list never shuffles between refreshes.
+    func testSameDateFallsBackToNameOrder() {
+        for name in ["b.md", "a.md"] {
+            write(name, "")
+            try? FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 5_000)],
+                                                   ofItemAtPath: folder.appendingPathComponent(name).path)
+        }
+        XCTAssertEqual(makeStore().files.map(\.name), ["a", "b"])
     }
 
     func testSelectingLoadsTheBody() {
@@ -258,7 +274,7 @@ final class FolderStoreTests: XCTestCase {
         store.commitRename(folder.appendingPathComponent("b.md"), to: "c")
 
         XCTAssertEqual(store.selection?.lastPathComponent, "a.md")
-        XCTAssertEqual(store.files.map(\.name), ["a", "c"])
+        XCTAssertEqual(store.files.map(\.name).sorted(), ["a", "c"])
     }
 
     /// macOS volumes are case-insensitive by default, so `fileExists` answers
@@ -303,7 +319,7 @@ final class FolderStoreTests: XCTestCase {
         store.commitRename(folder.appendingPathComponent("a.md"), to: "b")
 
         XCTAssertEqual(store.banner, .saveFailed("A file named b.md already exists."))
-        XCTAssertEqual(store.files.map(\.name), ["a", "b"])
+        XCTAssertEqual(store.files.map(\.name).sorted(), ["a", "b"])
     }
 
     /// A renamed file must not later rename itself from its heading.
@@ -333,6 +349,63 @@ final class FolderStoreTests: XCTestCase {
 
     // MARK: - Deleting
 
+    // MARK: - Images
+
+    private func sampleImage() -> NSImage {
+        let image = NSImage(size: NSSize(width: 4, height: 2))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: 4, height: 2).fill()
+        image.unlockFocus()
+        return image
+    }
+
+    /// A pasted image lands as a PNG in `assets/`, named after the open file,
+    /// and the returned markdown points at it relative to the folder.
+    func testSaveImageWritesAPngIntoAssetsAndReturnsMarkdown() throws {
+        write("Notes.md", "")
+        let store = makeStore()
+        store.select(folder.appendingPathComponent("Notes.md"))
+
+        let markdown = try XCTUnwrap(store.saveImage(sampleImage()))
+        let path = try XCTUnwrap(MarkdownParser.parse(markdown).first.flatMap {
+            if case let .image(_, path) = $0 { return path } else { return nil }
+        })
+        XCTAssertTrue(path.hasPrefix("assets/Notes-"), path)
+        XCTAssertTrue(path.hasSuffix(".png"), path)
+
+        let file = folder.appendingPathComponent(path)
+        let data = try Data(contentsOf: file)
+        // PNG magic bytes.
+        XCTAssertEqual(Array(data.prefix(4)), [0x89, 0x50, 0x4E, 0x47])
+        XCTAssertNotNil(NSImage(contentsOf: file))
+    }
+
+    func testTwoImagesInTheSameSecondGetDifferentNames() throws {
+        write("a.md", "")
+        let store = makeStore()
+        store.select(folder.appendingPathComponent("a.md"))
+        let first = try XCTUnwrap(store.saveImage(sampleImage()))
+        let second = try XCTUnwrap(store.saveImage(sampleImage()))
+        XCTAssertNotEqual(first, second)
+    }
+
+    /// The assets folder is not a note and must not show up in the sidebar.
+    func testAssetsFolderDoesNotAppearInTheListing() {
+        write("a.md", "")
+        let store = makeStore()
+        store.select(folder.appendingPathComponent("a.md"))
+        _ = store.saveImage(sampleImage())
+        store.refresh()
+        XCTAssertEqual(store.files.map(\.name), ["a"])
+    }
+
+    func testSaveImageWithNoOpenFileDoesNothing() {
+        let store = makeStore()
+        XCTAssertNil(store.saveImage(sampleImage()))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("assets").path))
+    }
+
     func testDeleteNeedsConfirmationFirst() {
         write("a.md", "a")
         let store = makeStore()
@@ -347,8 +420,11 @@ final class FolderStoreTests: XCTestCase {
     }
 
     func testConfirmedDeleteRemovesTheFile() {
-        write("a.md", "a")
+        // b is older, so a sits at the top of the newest-first list.
         write("b.md", "b")
+        try? FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000)],
+                                               ofItemAtPath: folder.appendingPathComponent("b.md").path)
+        write("a.md", "a")
         let store = makeStore()
 
         XCTAssertEqual(store.selection?.lastPathComponent, "a.md",
