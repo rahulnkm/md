@@ -83,6 +83,27 @@ final class BlockParserTests: XCTestCase {
         XCTAssertEqual(MarkdownParser.parse(""), [])
     }
 
+    func testImageOnItsOwnLineIsABlock() {
+        XCTAssertEqual(MarkdownParser.parse("![shot](assets/shot.png)"),
+                       [.image(alt: "shot", path: "assets/shot.png")])
+        XCTAssertEqual(MarkdownParser.parse("![](assets/shot.png)"),
+                       [.image(alt: "", path: "assets/shot.png")])
+    }
+
+    func testImageSplitsTheSurroundingParagraph() {
+        XCTAssertEqual(MarkdownParser.parse("before\n![](a.png)\nafter"),
+                       [.paragraph("before"), .image(alt: "", path: "a.png"), .paragraph("after")])
+    }
+
+    /// Only a line that is nothing but the image counts. Mid-sentence it is
+    /// just text, and a malformed one must not eat the line.
+    func testImageInsideProseStaysProse() {
+        XCTAssertEqual(MarkdownParser.parse("see ![](a.png) here"),
+                       [.paragraph("see ![](a.png) here")])
+        XCTAssertEqual(MarkdownParser.parse("![](a.png"), [.paragraph("![](a.png")])
+        XCTAssertEqual(MarkdownParser.parse("![]()"), [.paragraph("![]()")])
+    }
+
     func testStrayQuoteMarkerDoesNotCrash() {
         XCTAssertEqual(MarkdownParser.parse(">"), [.quote("")])
     }
@@ -112,6 +133,7 @@ final class BlockParserTests: XCTestCase {
             case let .quote(text):          rendered += text + " "
             case let .code(_, code):        rendered += code + " "
             case let .list(_, items):       rendered += items.map(\.text).joined(separator: " ") + " "
+            case let .image(alt, path):     rendered += alt + " " + path + " "
             case .rule:                     break
             }
         }

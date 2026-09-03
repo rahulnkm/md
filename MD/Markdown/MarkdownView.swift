@@ -6,6 +6,8 @@ import SwiftUI
 /// Geist Mono wherever it appears.
 struct MarkdownView: View {
     let blocks: [Block]
+    /// Folder that relative image paths resolve against.
+    var baseURL: URL? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.blockSpacing) {
@@ -74,12 +76,59 @@ struct MarkdownView: View {
                     .fill(Theme.codeBackground)
             )
 
+        case let .image(alt, path):
+            if let url = ImageFile.resolve(path, against: baseURL),
+               let image = ImageFile.load(url) {
+                // Fits the column and keeps its shape, like Stickies'
+                // width-fit attachment. Never wider than the text, never
+                // upscaled past its own pixels.
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: image.size.width, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+                    .accessibilityLabel(alt)
+            } else {
+                // The file is gone or unreadable. Say so instead of leaving
+                // a silent hole, and keep the path so it can be fixed.
+                Text("Missing image: \(path)")
+                    .font(Theme.uiFont(size: 12))
+                    .foregroundColor(.secondary)
+            }
+
         case .rule:
             Rectangle()
                 .fill(Color.secondary.opacity(0.4))
                 .frame(height: 1)
                 .padding(.vertical, 4)
         }
+    }
+}
+
+/// Finds and loads the images a file refers to.
+enum ImageFile {
+    /// Only files on disk. The README promises no network code, and a
+    /// markdown file is untrusted input, so a URL with a scheme is not fetched.
+    static func resolve(_ path: String, against base: URL?) -> URL? {
+        let decoded = path.removingPercentEncoding ?? path
+        if decoded.contains("://") { return nil }
+        if decoded.hasPrefix("/") { return URL(fileURLWithPath: decoded) }
+        guard let base else { return nil }
+        return base.appendingPathComponent(decoded).standardizedFileURL
+    }
+
+    /// Preview re-renders on every state change, hover included, and decoding
+    /// a screenshot each time would stutter. Cached by path and modification
+    /// date, so a file replaced on disk still shows its new contents.
+    private static let cache = NSCache<NSString, NSImage>()
+
+    static func load(_ url: URL) -> NSImage? {
+        let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        let key = "\(url.path)|\(modified?.timeIntervalSince1970 ?? 0)" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
     }
 }
 

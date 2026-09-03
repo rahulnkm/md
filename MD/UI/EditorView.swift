@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 /// Plain-text markdown editor. Adapted from Stickies' `NoteTextEditor`, with
 /// rich text swapped out for plain text plus syntax dimming.
@@ -13,6 +14,11 @@ struct EditorView: NSViewRepresentable {
     /// Changes whenever the store replaces the buffer from outside the editor.
     let revision: Int
     let onChange: (String) -> Void
+    /// Hands pasted or dropped images to the store, which puts them on disk
+    /// and returns the markdown to insert. Nil means nothing was written.
+    let onImages: ([NSImage]) -> String?
+    /// Changes whenever the user asks to find inside this file.
+    var findRequest: Int = 0
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -58,6 +64,14 @@ struct EditorView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.typingAttributes = Self.typingAttributes()
         textView.delegate = context.coordinator
+        // The system find bar: incremental highlighting, next/previous,
+        // Escape to dismiss. It docks at the top of the scroll view.
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
+        textView.onImages = onImages
+        // A plain-text view only registers for text drops. Image files and
+        // raw image data have to be asked for.
+        textView.registerForDraggedTypes(textView.registeredDraggedTypes + [.fileURL, .png, .tiff])
 
         textView.string = text
         textView.textStorage?.addAttributes(
@@ -67,6 +81,7 @@ struct EditorView: NSViewRepresentable {
 
         context.coordinator.textView = textView
         context.coordinator.revision = revision
+        context.coordinator.findRequest = findRequest
         context.coordinator.applyDimming()
 
         scroll.documentView = textView
@@ -89,6 +104,11 @@ struct EditorView: NSViewRepresentable {
                 textView.setSelectedRange(NSRange(location: 0, length: 0))
             }
             context.coordinator.applyDimming()
+        }
+
+        if context.coordinator.findRequest != findRequest {
+            context.coordinator.findRequest = findRequest
+            context.coordinator.showFindBar()
         }
 
         // Keep the text view pinned to the clip view's width so long lines
@@ -120,6 +140,7 @@ struct EditorView: NSViewRepresentable {
         let onChange: (String) -> Void
         weak var textView: NSTextView?
         var revision = -1
+        var findRequest = 0
 
         init(onChange: @escaping (String) -> Void) { self.onChange = onChange }
 
@@ -127,6 +148,26 @@ struct EditorView: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             applyDimming()
             onChange(textView.string)
+        }
+
+        /// `performTextFinderAction` reads the action off its sender's tag,
+        /// the way a menu item would carry it.
+        func showFindBar(attempt: Int = 0) {
+            guard let textView else { return }
+            // No window yet means the view was just created; try again once
+            // it has been mounted rather than acting on nothing.
+            guard textView.window != nil else {
+                if attempt < 5 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                        self?.showFindBar(attempt: attempt + 1)
+                    }
+                }
+                return
+            }
+            textView.window?.makeFirstResponder(textView)
+            let sender = NSMenuItem()
+            sender.tag = NSTextFinder.Action.showFindInterface.rawValue
+            textView.performTextFinderAction(sender)
         }
 
         /// Fades markdown syntax characters so they recede while writing.
@@ -150,8 +191,102 @@ struct EditorView: NSViewRepresentable {
 
 /// An `NSTextView` that opts into vibrancy, so its glyphs are blended against
 /// whatever is behind the window rather than painted at a fixed colour.
+///
+/// Also the place images come in. The view is plain text, so a pasted image
+/// cannot become an attachment the way it does in Stickies; instead it is
+/// handed out through `onImages` and comes back as a line of markdown.
 private final class VibrantTextView: NSTextView {
     override var allowsVibrancy: Bool { true }
+
+    var onImages: (([NSImage]) -> String?)?
+
+    /// A plain-text view only admits string types, so with an image on the
+    /// clipboard AppKit greys out Paste and ⌘V never arrives. Declaring the
+    /// image types readable is what turns the menu item on.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.readablePasteboardTypes + [.png, .tiff, .fileURL]
+    }
+
+    // MARK: - Paste
+
+    // A plain-text view routes ⌘V to `pasteAsPlainText:`, not `paste:`;
+    // both are covered so the menu item and the shortcut behave the same.
+    override func paste(_ sender: Any?) {
+        if pasteImages() { return }
+        super.paste(sender)
+    }
+
+    override func pasteAsPlainText(_ sender: Any?) {
+        if pasteImages() { return }
+        super.pasteAsPlainText(sender)
+    }
+
+    private func pasteImages() -> Bool {
+        let images = Self.images(on: NSPasteboard.general)
+        guard !images.isEmpty else { return false }
+        return insertImages(images, at: selectedRange().location)
+    }
+
+    // MARK: - Drag
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if !Self.images(on: sender.draggingPasteboard).isEmpty { return .copy }
+        return super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if !Self.images(on: sender.draggingPasteboard).isEmpty { return .copy }
+        return super.draggingUpdated(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let images = Self.images(on: sender.draggingPasteboard)
+        guard !images.isEmpty else { return super.performDragOperation(sender) }
+        let point = convert(sender.draggingLocation, from: nil)
+        return insertImages(images, at: characterIndexForInsertion(at: point))
+    }
+
+    // MARK: - Insertion
+
+    /// Puts the markdown for the images in its own paragraph at `index`,
+    /// blank line either side, so other renderers read it as a block rather
+    /// than a picture glued into a sentence. Goes through `insertText` so it
+    /// is undoable and the delegate hears about it like any keystroke.
+    @discardableResult
+    private func insertImages(_ images: [NSImage], at index: Int) -> Bool {
+        guard let markdown = onImages?(images) else { return false }
+        let text = string as NSString
+        let location = min(index, text.length)
+        let before = text.substring(to: location)
+        let after = text.substring(from: location)
+
+        var snippet = markdown + "\n"
+        if !before.isEmpty && !before.hasSuffix("\n\n") {
+            snippet = (before.hasSuffix("\n") ? "\n" : "\n\n") + snippet
+        }
+        if !after.isEmpty && !after.hasPrefix("\n") {
+            snippet += "\n"
+        }
+
+        insertText(snippet, replacementRange: NSRange(location: location, length: 0))
+        return true
+    }
+
+    // MARK: - Pasteboard
+
+    /// Same lookup as Stickies: image files first, so a Finder drag of a
+    /// JPEG reads the file rather than the icon, then raw image data for
+    /// screenshots and browser drags.
+    static func images(on pasteboard: NSPasteboard) -> [NSImage] {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
+                                            options: [.urlReadingFileURLsOnly: true]) as? [URL] {
+            let files = urls.filter { url in
+                UTType(filenameExtension: url.pathExtension.lowercased())?.conforms(to: .image) ?? false
+            }.compactMap { NSImage(contentsOf: $0) }
+            if !files.isEmpty { return files }
+        }
+        return (pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage]) ?? []
+    }
 }
 
 /// Locates the markdown syntax characters that should recede while editing.

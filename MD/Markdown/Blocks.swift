@@ -18,6 +18,9 @@ enum Block: Equatable {
     case list(ordered: Bool, items: [ListItem])
     case quote(String)
     case code(language: String?, code: String)
+    /// `![alt](path)` alone on a line. `path` is as written, usually relative
+    /// to the folder the file lives in.
+    case image(alt: String, path: String)
     case rule
 }
 
@@ -80,6 +83,13 @@ enum MarkdownParser {
             if let heading = heading(line) {
                 flushParagraph()
                 blocks.append(heading)
+                i += 1
+                continue
+            }
+
+            if let image = image(line) {
+                flushParagraph()
+                blocks.append(image)
                 i += 1
                 continue
             }
@@ -192,6 +202,18 @@ enum MarkdownParser {
         // ATX headings require a space after the hashes, so `#tag` stays prose.
         guard rest.isEmpty || rest.hasPrefix(" ") else { return nil }
         return .heading(level: hashes.count, text: rest.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// A line that is nothing but `![alt](path)`. Inside prose the same text
+    /// stays literal; block-level is the only shape a paste produces and the
+    /// only one worth a full-width picture.
+    private static func image(_ line: String) -> Block? {
+        guard line.hasPrefix("!["), line.hasSuffix(")"),
+              let split = line.range(of: "](") else { return nil }
+        let alt = String(line[line.index(line.startIndex, offsetBy: 2)..<split.lowerBound])
+        let path = String(line[split.upperBound..<line.index(before: line.endIndex)])
+        guard !alt.contains("]"), !path.isEmpty, !path.contains("(") else { return nil }
+        return .image(alt: alt, path: path)
     }
 
     private static func isQuote(_ line: String) -> Bool { line.hasPrefix(">") }

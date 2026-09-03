@@ -44,6 +44,13 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .frame(height: Theme.topPadding)
         }
+        // Above the chrome and the AppKit editor, for the same hit-testing
+        // reason the chrome is an overlay.
+        .overlay {
+            if store.searching {
+                SearchModal(store: store)
+            }
+        }
         .ignoresSafeArea()
         // Each surface pins its own scheme, so the window stops following the
         // system and the text always matches the glass it sits on.
@@ -89,13 +96,16 @@ struct ContentView: View {
             } else if store.mode == .edit {
                 EditorView(text: store.buffer,
                            revision: store.revision,
-                           onChange: { store.buffer = $0 })
+                           onChange: { store.buffer = $0 },
+                           onImages: { store.saveImages($0) },
+                           findRequest: store.findRequest)
                     .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
                     .padding(.horizontal, Theme.innerPadding)
                     .padding(.bottom, Theme.innerPadding)
             } else {
                 ScrollView {
-                    MarkdownView(blocks: MarkdownParser.parse(store.buffer))
+                    MarkdownView(blocks: MarkdownParser.parse(store.buffer),
+                                 baseURL: store.folderURL)
                         .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
                         .padding(.horizontal, Theme.innerPadding)
                         .padding(.bottom, Theme.innerPadding)
