@@ -45,6 +45,10 @@ final class FolderStore: ObservableObject {
     /// True until a file created with New has taken its name from a heading.
     private var awaitingSlug = false
     private var autosave: DispatchWorkItem?
+    /// Scroll and cursor per file, for the length of the session. Not
+    /// published: it changes on every scroll tick and nothing needs to
+    /// redraw for it; the views read it when a file is (re)opened.
+    private var positions: [URL: FilePosition] = [:]
 
     private static let autosaveDelay: TimeInterval = 0.8
     /// Name a new file carries until it is renamed or takes one from a heading.
@@ -213,6 +217,22 @@ final class FolderStore: ObservableObject {
 
     func toggleMode() {
         mode = (mode == .edit) ? .view : .edit
+    }
+
+    // MARK: - Position
+
+    /// The last known place in the open file, or the top for a new one.
+    var position: FilePosition {
+        selection.flatMap { positions[$0] } ?? FilePosition()
+    }
+
+    func rememberEditPosition(offset: CGFloat, cursor: Int, for url: URL) {
+        positions[url, default: FilePosition()].editOffset = offset
+        positions[url, default: FilePosition()].cursor = cursor
+    }
+
+    func rememberViewPosition(offset: CGFloat, for url: URL) {
+        positions[url, default: FilePosition()].viewOffset = offset
     }
 
     // MARK: - Search

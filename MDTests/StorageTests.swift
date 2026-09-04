@@ -349,6 +349,25 @@ final class FolderStoreTests: XCTestCase {
 
     // MARK: - Deleting
 
+    // MARK: - Position
+
+    /// Leaving a file and coming back lands where you were, not at the top.
+    func testPositionSurvivesSwitchingFiles() {
+        write("a.md", "")
+        write("b.md", "")
+        let store = makeStore()
+        let a = folder.appendingPathComponent("a.md")
+        store.select(a)
+        store.rememberEditPosition(offset: 420, cursor: 12, for: a)
+        store.rememberViewPosition(offset: 99, for: a)
+
+        store.select(folder.appendingPathComponent("b.md"))
+        XCTAssertEqual(store.position, FilePosition())
+
+        store.select(a)
+        XCTAssertEqual(store.position, FilePosition(editOffset: 420, cursor: 12, viewOffset: 99))
+    }
+
     // MARK: - Images
 
     private func sampleImage() -> NSImage {

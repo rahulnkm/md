@@ -33,6 +33,15 @@ enum Mode {
     case edit, view
 }
 
+/// Where the user was in a file: the editor's scroll offset and cursor, and
+/// the preview's scroll offset. Kept per file so leaving and coming back
+/// lands in the same place.
+struct FilePosition: Equatable {
+    var editOffset: CGFloat = 0
+    var cursor: Int = 0
+    var viewOffset: CGFloat = 0
+}
+
 /// An in-progress rename.
 ///
 /// The source matters: the sidebar row and the title in the hover chrome are

@@ -19,6 +19,10 @@ struct EditorView: NSViewRepresentable {
     let onImages: ([NSImage]) -> String?
     /// Changes whenever the user asks to find inside this file.
     var findRequest: Int = 0
+    /// Where to land when the buffer is (re)opened.
+    var position: FilePosition = FilePosition()
+    /// Reports scroll offset and cursor as they change.
+    var onPositionChange: (CGFloat, Int) -> Void = { _, _ in }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -82,28 +86,43 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.revision = revision
         context.coordinator.findRequest = findRequest
+        context.coordinator.onPositionChange = onPositionChange
         context.coordinator.applyDimming()
 
         scroll.documentView = textView
+
+        scroll.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.observer = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scroll.contentView, queue: .main
+        ) { [weak coordinator = context.coordinator] _ in
+            coordinator?.reportPosition()
+        }
+        context.coordinator.restore(position)
         return scroll
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
 
+        context.coordinator.onPositionChange = onPositionChange
+
         // Only replace the contents when the store says this is a different
         // buffer, never on every keystroke.
         if context.coordinator.revision != revision {
             context.coordinator.revision = revision
+            // Replacing the text scrolls to the top; that must not be
+            // recorded as the user's position in the file being opened.
+            context.coordinator.restoring = true
             if textView.string != text {
                 textView.string = text
                 textView.textStorage?.addAttributes(
                     Self.typingAttributes(),
                     range: NSRange(location: 0, length: (text as NSString).length)
                 )
-                textView.setSelectedRange(NSRange(location: 0, length: 0))
             }
             context.coordinator.applyDimming()
+            context.coordinator.restore(position)
         }
 
         if context.coordinator.findRequest != findRequest {
@@ -141,6 +160,45 @@ struct EditorView: NSViewRepresentable {
         weak var textView: NSTextView?
         var revision = -1
         var findRequest = 0
+        var onPositionChange: (CGFloat, Int) -> Void = { _, _ in }
+        var observer: NSObjectProtocol?
+        /// True while a programmatic jump is in flight, so the scroll it
+        /// causes is not recorded as the user's doing.
+        var restoring = false
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            reportPosition()
+        }
+
+        func reportPosition() {
+            guard !restoring, let textView, let scroll = textView.enclosingScrollView else { return }
+            onPositionChange(scroll.contentView.bounds.origin.y, textView.selectedRange().location)
+        }
+
+        /// Puts the cursor and the scroll offset back. Layout is lazy, so it
+        /// is forced first or a long file has no height to scroll into, and
+        /// the jump waits a turn for the view to be in its window.
+        func restore(_ position: FilePosition) {
+            restoring = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                let length = (textView.string as NSString).length
+                textView.setSelectedRange(NSRange(location: min(position.cursor, length), length: 0))
+                if let scroll = textView.enclosingScrollView {
+                    if let container = textView.textContainer {
+                        textView.layoutManager?.ensureLayout(for: container)
+                    }
+                    let maxY = max(0, textView.frame.height - scroll.contentView.bounds.height)
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: min(position.editOffset, maxY)))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                }
+                self.restoring = false
+            }
+        }
 
         init(onChange: @escaping (String) -> Void) { self.onChange = onChange }
 

@@ -93,17 +93,21 @@ struct ContentView: View {
                     .font(Theme.uiFont(size: 12))
                     .foregroundColor(Color.primary.opacity(0.55))
                 Spacer()
-            } else if store.mode == .edit {
+            } else if let url = store.selection, store.mode == .edit {
                 EditorView(text: store.buffer,
                            revision: store.revision,
                            onChange: { store.buffer = $0 },
                            onImages: { store.saveImages($0) },
-                           findRequest: store.findRequest)
+                           findRequest: store.findRequest,
+                           position: store.position,
+                           onPositionChange: { store.rememberEditPosition(offset: $0, cursor: $1, for: url) })
                     .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
                     .padding(.horizontal, Theme.innerPadding)
                     .padding(.bottom, Theme.innerPadding)
-            } else {
-                ScrollView {
+            } else if let url = store.selection {
+                PositionScrollView(offset: store.position.viewOffset,
+                                   key: store.revision,
+                                   onScroll: { store.rememberViewPosition(offset: $0, for: url) }) {
                     MarkdownView(blocks: MarkdownParser.parse(store.buffer),
                                  baseURL: store.folderURL)
                         .padding(.top, store.banner == nil ? Theme.topPadding : Theme.innerPadding)
