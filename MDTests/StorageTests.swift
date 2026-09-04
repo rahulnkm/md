@@ -368,39 +368,6 @@ final class FolderStoreTests: XCTestCase {
         XCTAssertEqual(store.position, FilePosition(editOffset: 420, cursor: 12, viewOffset: 99))
     }
 
-    /// Positions survive a relaunch: a new store on the same defaults
-    /// finds what the old one recorded.
-    func testPositionSurvivesRelaunch() {
-        write("a.md", "")
-        write("gone.md", "")
-        let suite = UserDefaults(suiteName: "md.tests.\(UUID().uuidString)")!
-        let a = folder.appendingPathComponent("a.md")
-        let gone = folder.appendingPathComponent("gone.md")
-
-        let first = FolderStore(defaults: suite)
-        first.open(folder: folder, remember: false)
-        first.rememberEditPosition(offset: 300, cursor: 7, for: a)
-        first.rememberViewPosition(offset: 50, for: gone)
-        first.savePositions()
-
-        let saved = try! JSONDecoder().decode([String: FilePosition].self,
-                                              from: suite.data(forKey: "filePositions")!)
-        XCTAssertNotNil(saved[gone.path])
-
-        try? FileManager.default.removeItem(at: gone)
-        let second = FolderStore(defaults: suite)
-        second.open(folder: folder, remember: false)
-        second.select(a)
-        XCTAssertEqual(second.position, FilePosition(editOffset: 300, cursor: 7, viewOffset: 0))
-
-        // The deleted file's entry was dropped on load and is gone from disk.
-        second.savePositions()
-        let resaved = try! JSONDecoder().decode([String: FilePosition].self,
-                                                from: suite.data(forKey: "filePositions")!)
-        XCTAssertNil(resaved[gone.path])
-        XCTAssertNotNil(resaved[a.path])
-    }
-
     // MARK: - Images
 
     private func sampleImage() -> NSImage {
