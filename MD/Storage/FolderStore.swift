@@ -35,6 +35,7 @@ final class FolderStore: ObservableObject {
     private enum Keys {
         static let folder = "folderPath"
         static let tint = "tintStyle"
+        static let positions = "filePositions"
     }
 
     private let defaults: UserDefaults
@@ -45,10 +46,12 @@ final class FolderStore: ObservableObject {
     /// True until a file created with New has taken its name from a heading.
     private var awaitingSlug = false
     private var autosave: DispatchWorkItem?
-    /// Scroll and cursor per file, for the length of the session. Not
-    /// published: it changes on every scroll tick and nothing needs to
-    /// redraw for it; the views read it when a file is (re)opened.
-    private var positions: [URL: FilePosition] = [:]
+    /// Scroll and cursor per file. Not published: it changes on every
+    /// scroll tick and nothing needs to redraw for it; the views read it when
+    /// a file is (re)opened. Persisted to defaults, keyed by path, so a
+    /// relaunch lands where you left off.
+    private var positions: [URL: FilePosition] = [:] { didSet { schedulePositionsSave() } }
+    private var positionsSave: DispatchWorkItem?
 
     private static let autosaveDelay: TimeInterval = 0.8
     /// Name a new file carries until it is renamed or takes one from a heading.
@@ -61,6 +64,7 @@ final class FolderStore: ObservableObject {
         if let raw = defaults.string(forKey: Keys.tint), let saved = TintStyle(rawValue: raw) {
             tint = saved
         }
+        loadPositions()
         if let path = defaults.string(forKey: Keys.folder) {
             open(folder: URL(fileURLWithPath: path), remember: false)
         }
@@ -235,6 +239,41 @@ final class FolderStore: ObservableObject {
         positions[url, default: FilePosition()].viewOffset = offset
     }
 
+    private func loadPositions() {
+        guard let data = defaults.data(forKey: Keys.positions),
+              let saved = try? JSONDecoder().decode([String: FilePosition].self, from: data) else { return }
+        // Files that are gone take their entries with them, so the store
+        // does not grow forever with every folder ever opened.
+        var loaded: [URL: FilePosition] = [:]
+        for (path, position) in saved where fileManager.fileExists(atPath: path) {
+            loaded[URL(fileURLWithPath: path)] = position
+        }
+        suppressPositionsSave = true
+        positions = loaded
+        suppressPositionsSave = false
+    }
+
+    private var suppressPositionsSave = false
+
+    /// Scroll ticks arrive many times a second; one write half a second
+    /// after the last is plenty.
+    private func schedulePositionsSave() {
+        guard !suppressPositionsSave else { return }
+        positionsSave?.cancel()
+        let task = DispatchWorkItem { [weak self] in self?.savePositions() }
+        positionsSave = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: task)
+    }
+
+    /// Writes now. Called on quit so the last half second is not lost.
+    func savePositions() {
+        positionsSave?.cancel()
+        let byPath = Dictionary(uniqueKeysWithValues: positions.map { ($0.key.path, $0.value) })
+        if let data = try? JSONEncoder().encode(byPath) {
+            defaults.set(data, forKey: Keys.positions)
+        }
+    }
+
     // MARK: - Search
 
     func openSearch() {
@@ -324,6 +363,7 @@ final class FolderStore: ObservableObject {
     func saveNow() {
         autosave?.cancel()
         save()
+        savePositions()
     }
 
     private func write(to url: URL) {

@@ -36,7 +36,7 @@ enum Mode {
 /// Where the user was in a file: the editor's scroll offset and cursor, and
 /// the preview's scroll offset. Kept per file so leaving and coming back
 /// lands in the same place.
-struct FilePosition: Equatable {
+struct FilePosition: Equatable, Codable {
     var editOffset: CGFloat = 0
     var cursor: Int = 0
     var viewOffset: CGFloat = 0
