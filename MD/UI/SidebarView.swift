@@ -5,8 +5,6 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var store: FolderStore
 
-    @State private var searchHovering = false
-
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -25,26 +23,12 @@ struct SidebarView: View {
         }
     }
 
-    /// One control, pinned under the list where the thumb and the eye both
-    /// land: search across every file.
+    /// Two controls, pinned under the list where the thumb and the eye both
+    /// land: search across every file, and a new one.
     private var footer: some View {
-        HStack {
-            Button(action: { store.openSearch() }) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.primary)
-                    .opacity(searchHovering ? 0.9 : 0.5)
-                    .frame(width: 24, height: 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.primary.opacity(searchHovering ? 0.10 : 0))
-                    )
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { searchHovering = $0 }
-            .animation(.easeInOut(duration: 0.12), value: searchHovering)
-            .help("Search all files (⌘K)")
+        HStack(spacing: 2) {
+            FooterButton(symbol: "magnifyingglass", help: "Search all files (⌘K)") { store.openSearch() }
+            FooterButton(symbol: "plus", help: "New file (⌘N)") { store.newFile() }
             Spacer()
         }
         .padding(.horizontal, 8)
@@ -109,5 +93,34 @@ struct SidebarView: View {
     /// Matches the relative date formatting in Stickies' Manager window.
     static func relativeDate(_ date: Date) -> String {
         relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+/// Sidebar footer icon: faint until hovered, so it reads as chrome rather
+/// than content.
+private struct FooterButton: View {
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.primary)
+                .opacity(hovering ? 0.9 : 0.5)
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.primary.opacity(hovering ? 0.10 : 0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.12), value: hovering)
+        .help(help)
     }
 }

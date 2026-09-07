@@ -27,7 +27,9 @@ floating notes.
 
 ## Search
 
-The magnifier at the bottom of the sidebar, or `⌘K`, opens a search across
+The `+` at the bottom of the sidebar makes a new file, same as `⌘N`.
+
+The magnifier next to it, or `⌘K`, opens a search across
 every file in the folder. It matches keywords in names and bodies, and
 fuzzily - `mtg` finds `meeting-notes`, a typo still lands. Arrow keys move,
 Return opens, Escape closes. With nothing typed it lists files newest first.
